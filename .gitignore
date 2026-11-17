@@ -5,3 +5,8 @@ build/
 dist/
 *.pyc
 .benchmarks/
+.venv/
+venv/
+node_modules/
+.coverage
+.env
