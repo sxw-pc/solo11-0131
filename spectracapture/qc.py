@@ -1,7 +1,7 @@
 """Independent control injections that qualify a calibration for reporting."""
 import json
 from .ingest import capture
-from .store import connect,save,decide
+from .store import connect,save,decide,link
 
 
 def assess(path,file):
@@ -22,10 +22,11 @@ def assess(path,file):
                         error=abs(measured-float(control['expected']))/float(control['expected'])
                         controls.append(dict(control,measured=measured,relative_error=error))
                         if error>float(control['max_relative_error']):status,reason='失控','control_recovery_failed'
-                save(db,'qc_batch',key,source,payload['version'],row,status,reason)
+                batch_eid=save(db,'qc_batch',key,source,payload['version'],row,status,reason)
                 for i,control in enumerate(controls):
-                    save(db,'qc_control',f'{key}:{i}',source,payload['version'],control,
+                    control_eid=save(db,'qc_control',f'{key}:{i}',source,payload['version'],control,
                          '合格' if control['relative_error']<=float(control['max_relative_error']) else '失控',reason)
+                    link(db,control_eid,batch_eid,'references')
                 results.append(decide(db,'质控序列',key,status,reason,source))
         return results
     finally:db.close()

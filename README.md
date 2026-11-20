@@ -23,3 +23,22 @@ python -m pytest -q
 | 结果与批次 | `result_batch`, `released_result`, `release_manifest`, `release_item` | 将曲线、质控、峰与交接证据合并为可放行、待核或拒放；批次区分全部与部分可发布，撤回后重放原导出不会恢复封账。 |
 
 同一来源的重放基于文件摘要保持幂等；同一实体 ID 变更内容将阻止覆盖。`export_file` 保留原始字节，`export_record` 保留逐行身份与内容。报告重新核对每份原始文件的摘要。测试覆盖正常、冲突、部分失败、迟到撤回和重放。
+
+## 离线证据交换与合并
+
+两个断网实验室各自维护一份 `ledger.db`。交换包只包含已提交的原文件、该副本的提交链、这些提交产生的证据节点/链接/裁定，以及解决链接所需的因果前驱；本地整数 ID 从不出库。
+
+```powershell
+python -m spectracapture exchange-export --db lab-a.db --out a.json [--since N]
+python -m spectracapture exchange-import --db lab-b.db a.json
+python -m spectracapture exchange-status --db lab-b.db
+python -m spectracapture evidence-graph --db lab-b.db --out graph.json
+python -m spectracapture review-resolve --db lab-b.db review.json
+python -m spectracapture report --db lab-b.db --out report.json
+```
+
+- **稳定身份**：原文件用 `sha256(原始字节)`；提交号用 `sha256(副本, 序号, 上一提交, 文件摘要)`；证据节点用 `sha256(族, 业务键, 内容摘要, 文件摘要, 版本, 状态, 原因)`。相同字节在两库收敛为同一原文件并保留两条到达路径；同一业务键的不同原字节产生两条并发分支，互不覆盖。
+- **接收顺序**：先整包校验（字节摘要、包内引用、提交链、证据身份），再单事务写入。坏包整体拒绝，不留半个可见提交，`merge_log` 记录拒因与恢复游标。子提交先于父提交到达时挂起为 `deferred`，父包到达后自动续传；重复包返回 `duplicate`；写入中途崩溃后重放同一包与正常合并得到相同证据图。
+- **档案读法** `archive`：所有来源、并发分支、引用/撤回关系、未解冲突，不隐藏任何分支。
+- **业务读法** `business`：只允许因果闭合、未被撤回、且无并发分支或并发复核的证据形成可发布视图；未解决时列入 `pending`，撤回产生 `已撤回` 版本与 `notifications`。提交序号从不用于打破平局。
+- **复核裁定**：只有带签名、且引用全部存活分支和全部撤回证据的 `review_resolution` 才能解除冲突；旧版本、旧放行与旧撤回仍保留在档案中。

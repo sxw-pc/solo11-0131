@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 from .ingest import capture
-from .store import connect,save,decide
+from .store import connect, save, decide, link, head_evidence
 
 
 def first(path,file):
@@ -24,9 +24,12 @@ def first(path,file):
                 info=dict(row)
                 if len(points)>=3 and concentrations[-1]>concentrations[0]:
                     info['slope']=(areas[-1]-areas[0])/(concentrations[-1]-concentrations[0]);info['intercept']=areas[0]-info['slope']*concentrations[0]
-                save(db,'calibration_export',key,source,payload['version'],info,status,reason)
+                cal_id=save(db,'calibration_export',key,source,payload['version'],info,status,reason)
+                point_ids=[]
                 for i,point in enumerate(points):
-                    save(db,'calibration_point',f'{key}:{i}',source,payload['version'],point,status,reason)
+                    point_ids.append(save(db,'calibration_point',f'{key}:{i}',source,payload['version'],point,status,reason))
+                for point_eid in point_ids:
+                    link(db,point_eid,cal_id,'references')
                 results.append(decide(db,'标定曲线',key,status,reason,source))
         return results
     finally:db.close()
@@ -44,9 +47,10 @@ def second(path,file):
                 elif not candidates:status,reason='待核','peak_outside_window'
                 elif len(candidates)>1:status,reason='待核','ambiguous_peaks'
                 else:status,reason='已归属','unique_peak'
-                save(db,'sample_export',key,source,payload['version'],row,status,reason)
-                save(db,'peak_assignment',f'assignment:{key}',source,payload['version'],
+                sample_eid=save(db,'sample_export',key,source,payload['version'],row,status,reason)
+                assignment_eid=save(db,'peak_assignment',f'assignment:{key}',source,payload['version'],
                      {'sample':key,'peak':candidates[0] if len(candidates)==1 else None,'calibration':row['calibration']},status,reason)
+                link(db,assignment_eid,sample_eid,'references')
                 results.append(decide(db,'样本峰归属',key,status,reason,source))
         return results
     finally:db.close()
@@ -77,9 +81,14 @@ def third(path,file):
                     if concentration<low or concentration>high:status,reason='待核','outside_calibration_range'
                     elif concentration<float(row['quant_limit']):status,reason='待核','below_quant_limit'
                     else:status,reason='可放行','traceable_concentration'
-                save(db,'result_batch',key,source,payload['version'],row,status,reason)
-                save(db,'released_result',f'result:{key}',source,payload['version'],
+                batch_eid=save(db,'result_batch',key,source,payload['version'],row,status,reason)
+                result_eid=save(db,'released_result',f'result:{key}',source,payload['version'],
                      {'sample':row['sample'],'calibration':row['calibration'],'concentration':concentration},status,reason)
+                link(db,result_eid,batch_eid,'references')
+                replica=db.execute('SELECT replica_id FROM replica_state ORDER BY rowid LIMIT 1').fetchone()['replica_id']
+                for family,entity in (('sample_export',str(row['sample'])),('calibration_export',str(row['calibration']))):
+                    parent=head_evidence(db,family,entity,replica)
+                    if parent and parent!=result_eid:link(db,result_eid,parent,'references')
                 results.append(decide(db,'结果放行',key,status,reason,source))
         return results
     finally:db.close()
