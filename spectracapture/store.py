@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-TABLES=['calibration_export', 'calibration_point', 'sample_export', 'peak_assignment', 'result_batch', 'released_result', 'qc_batch', 'qc_control', 'peak_review', 'integration_revision', 'release_manifest', 'release_item', 'custody_case', 'custody_transfer', 'release_recall']
+TABLES=['calibration_export', 'calibration_point', 'sample_export', 'peak_assignment', 'result_batch', 'released_result', 'qc_batch', 'qc_control', 'peak_review', 'integration_revision', 'release_manifest', 'release_item', 'custody_case', 'custody_transfer', 'release_recall', 'transfer_plan', 'bridge_point', 'transfer_certificate']
 SCHEMA="""
 PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS export_file(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,version TEXT NOT NULL,hash TEXT NOT NULL,body BLOB NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(kind,hash));
@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS release_item(id TEXT PRIMARY KEY,source_id INT REFERE
 CREATE TABLE IF NOT EXISTS custody_case(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS custody_transfer(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS release_recall(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS transfer_plan(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS bridge_point(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS transfer_certificate(id TEXT PRIMARY KEY,source_id INT REFERENCES export_file(id),version TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL);
 """
 def connect(path):
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)

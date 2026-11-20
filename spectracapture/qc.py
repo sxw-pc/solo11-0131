@@ -2,6 +2,7 @@
 import json
 from .ingest import capture
 from .store import connect,save,decide
+from . import transfer
 
 
 def assess(path,file):
@@ -27,5 +28,6 @@ def assess(path,file):
                     save(db,'qc_control',f'{key}:{i}',source,payload['version'],control,
                          '合格' if control['relative_error']<=float(control['max_relative_error']) else '失控',reason)
                 results.append(decide(db,'质控序列',key,status,reason,source))
+            transfer.reevaluate_for_rows(db,payload.get('rows',[]),source)
         return results
     finally:db.close()

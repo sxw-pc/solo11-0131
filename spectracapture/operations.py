@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from .ingest import capture
 from .store import connect,save,decide
+from . import transfer
 
 
 def first(path,file):
@@ -28,6 +29,7 @@ def first(path,file):
                 for i,point in enumerate(points):
                     save(db,'calibration_point',f'{key}:{i}',source,payload['version'],point,status,reason)
                 results.append(decide(db,'标定曲线',key,status,reason,source))
+            transfer.reevaluate_for_rows(db,payload.get('rows',[]),source)
         return results
     finally:db.close()
 
