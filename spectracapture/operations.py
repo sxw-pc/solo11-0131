@@ -1,8 +1,23 @@
-"""Desktop chromatogram calibration, peak assignment, and release."""
+"""Desktop chromatogram calibration, peak assignment, and release.
+
+Source authenticity gates business use only. Peak areas, concentrations, curve math and
+already-signed analyst judgments are never recomputed or overwritten; when the source's
+business contract is not usable the rows keep their computed bodies but are persisted
+with a hold status carrying the source verdict reason.
+"""
 import json
 from datetime import datetime
 from .ingest import capture
 from .store import connect,save,decide
+from . import trust
+
+
+def _source_hold(db, source):
+    """Return the hold (status, reason) imposed by the business-use contract, or None."""
+    blocked, reason = trust.business_gate(db, source)
+    if not blocked:
+        return None
+    return reason
 
 
 def first(path,file):
@@ -10,6 +25,7 @@ def first(path,file):
     db=connect(path);results=[]
     try:
         with db:
+            hold=_source_hold(db,source)
             for row in payload.get('rows',[]):
                 key=str(row['id']);points=row.get('points',[])
                 concentrations=[float(p['concentration']) for p in points]
@@ -21,6 +37,7 @@ def first(path,file):
                     slope=(areas[-1]-areas[0])/(concentrations[-1]-concentrations[0]);intercept=areas[0]-slope*concentrations[0]
                     residual=max(abs(a-(slope*c+intercept)) for a,c in zip(areas,concentrations))
                     status,reason=('有效','curve_fit') if slope>0 and residual<=float(row['max_residual']) else ('失效','residual_exceeded')
+                if hold:status,reason='待核',f'source_hold:{hold}'
                 info=dict(row)
                 if len(points)>=3 and concentrations[-1]>concentrations[0]:
                     info['slope']=(areas[-1]-areas[0])/(concentrations[-1]-concentrations[0]);info['intercept']=areas[0]-info['slope']*concentrations[0]
@@ -37,6 +54,7 @@ def second(path,file):
     db=connect(path);results=[]
     try:
         with db:
+            hold=_source_hold(db,source)
             for row in payload.get('rows',[]):
                 key=str(row['id']);candidates=[p for p in row.get('peaks',[]) if float(row['window'][0])<=float(p['time'])<=float(row['window'][1])]
                 conflicting=db.execute("SELECT 1 FROM sample_export WHERE json_extract(body,'$.injection')=? AND id<>?",(row['injection'],key)).fetchone()
@@ -44,6 +62,7 @@ def second(path,file):
                 elif not candidates:status,reason='待核','peak_outside_window'
                 elif len(candidates)>1:status,reason='待核','ambiguous_peaks'
                 else:status,reason='已归属','unique_peak'
+                if hold:status,reason='待核',f'source_hold:{hold}'
                 save(db,'sample_export',key,source,payload['version'],row,status,reason)
                 save(db,'peak_assignment',f'assignment:{key}',source,payload['version'],
                      {'sample':key,'peak':candidates[0] if len(candidates)==1 else None,'calibration':row['calibration']},status,reason)
@@ -57,6 +76,7 @@ def third(path,file):
     db=connect(path);results=[]
     try:
         with db:
+            hold=_source_hold(db,source)
             for row in payload.get('rows',[]):
                 key=str(row['id']);cal=db.execute('SELECT * FROM calibration_export WHERE id=?',(str(row['calibration']),)).fetchone()
                 sample=db.execute('SELECT * FROM sample_export WHERE id=?',(str(row['sample']),)).fetchone()
@@ -77,6 +97,7 @@ def third(path,file):
                     if concentration<low or concentration>high:status,reason='待核','outside_calibration_range'
                     elif concentration<float(row['quant_limit']):status,reason='待核','below_quant_limit'
                     else:status,reason='可放行','traceable_concentration'
+                if hold:status,reason='拒放',f'source_hold:{hold}'
                 save(db,'result_batch',key,source,payload['version'],row,status,reason)
                 save(db,'released_result',f'result:{key}',source,payload['version'],
                      {'sample':row['sample'],'calibration':row['calibration'],'concentration':concentration},status,reason)
