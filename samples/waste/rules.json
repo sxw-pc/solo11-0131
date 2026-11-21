@@ -1,0 +1,10 @@
+{"version": "v1", "rows": [
+  {"id": "CAT-ACID", "kind": "category", "category": "acid", "label": "酸性清洗液"},
+  {"id": "CAT-NEUT", "kind": "category", "category": "neutralizer", "label": "中和剂"},
+  {"id": "CAT-OX", "kind": "category", "category": "oxidizer", "label": "氧化性废液"},
+  {"id": "NEUT-1", "kind": "neutralizer", "category": "neutralizer", "max_single_dose_l": 2.0},
+  {"id": "R-CONSUME", "kind": "consumes", "agent": "neutralizer", "target": "acid", "ratio": 1.0},
+  {"id": "R-GAS", "kind": "gas_reaction", "category": "oxidizer", "with": "acid", "threshold_l": 0.05},
+  {"id": "R-HEAT", "kind": "exotherm_limit", "agent": "neutralizer", "target": "acid", "max_reacted_l": 1.5},
+  {"id": "R-MAT", "kind": "material_limit", "material": "steel", "category": "oxidizer"}
+]}
